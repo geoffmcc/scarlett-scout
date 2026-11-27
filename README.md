@@ -49,7 +49,7 @@ This release is a substantial track-analysis and workflow foundation. It is not 
 - A 120-second rolling stereo float buffer feeds analysis and capture.
 - Capture Now saves the selected recent duration (5, 10, 15, 30, or 60 seconds).
 - Automatic interesting-section capture is enabled by default. There are no Capture/Ignore prompt buttons; Scout saves qualifying passages and resumes listening automatically.
-- Automatic capture includes an 18-second analysis lead-in plus 12 seconds of post-roll (nominally 30 seconds total). Analysis runs on five-second intervals, so the final saved clip can include a small additional scheduling margin.
+- Automatic capture includes an 18-second analysis lead-in plus 12 seconds of post-roll (nominally 30 seconds total). Analysis runs on two-second intervals, so the final saved clip can include a small additional scheduling margin.
 - A 45-second auto-capture cooldown reduces repeated captures of the same passage.
 - Sensitivity is adjustable. The automatic detector uses a combination of level, transient activity, tempo stability, tonal evidence, and novelty/interestingness rather than relying on the NPU to decide whether to save.
 - The audio callback only copies samples into the rolling buffer. DSP, disk writing, and AI inference happen on separate worker paths so model latency cannot block the audio callback.
@@ -59,17 +59,17 @@ This release is a substantial track-analysis and workflow foundation. It is not 
 - A `.analysis.txt` sidecar records endpoint/source, channels, mode, duration, level/clipping data, local estimates, track consensus, and related capture metadata.
 - Capture History lists recent WAV files; double-click opens the selected file in the Windows default audio player.
 
-The capture algorithm is intentionally conservative about claims: it may miss subtle/sample-worthy moments and it may save a false positive. Sensitivity and cooldown are tunable; sample quality still needs listening review.
+The capture algorithm is intended to surface candidate moments, not certify sample quality. It may still miss subtle or very brief events and it may save false positives. Sensitivity and cooldown are tunable; sample quality still needs listening review.
 
 ## Track-level musical analysis
 
-- DSP analyzes an 18-second rolling window every five seconds.
+- DSP analyzes an 18-second rolling window every two seconds.
 - Tempo uses spectral-flux onset tracking and periodicity checks. A candidate must recur in multiple sub-sections of the window. Nearby half-time/double-time interpretations are preserved as an alternate where evidence supports both.
-- DSP updates local estimates every five seconds, while track consensus receives one vote every ten seconds. That spacing reduces the correlation caused by repeatedly voting with highly overlapping 18-second windows.
+- DSP updates local estimates every two seconds, while track consensus receives one vote every ten seconds. That spacing reduces the correlation caused by repeatedly voting with highly overlapping 18-second windows.
 - Track tempo is a consensus over successive valid observations. The interface distinguishes a tentative local result from a track estimate supported by multiple windows.
 - Key estimation aggregates chroma across overlapping FFT windows. Track key consensus requires multiple confidence-qualified observations; if sections disagree or evidence is weak, Scout should not pretend the track has one certain key.
 - Additional analysis includes left/right RMS, peak level, clipping percentage, stereo correlation, transient rate, spectral centroid, crest factor, silence ratio, and a descriptive character/section heuristic.
-- A section-novelty measure compares successive analysis windows for changes in transient density, energy, spectral shape, and sufficiently supported tonal center. This can help auto-capture notice a new passage instead of depending only on a loud/steady signal.
+- A section-novelty measure compares successive analysis windows for changes in transient density, energy, spectral shape, and sufficiently supported tonal center. Both upward and downward changes are treated as potentially meaningful, so breakdowns and sparse passages are not ignored merely because they get quieter. Analysis cadence is two seconds to reduce the chance of missing short transitions; the underlying 18-second window still smooths very brief events.
 
 **Confidence language matters:** BPM stability and key-fit scores are algorithmic evidence scores, not calibrated statistical probabilities. Track agreement is the percentage of valid observations that support the selected consensus. A song with modulation, sparse harmony, heavy distortion, drums-only sections, or unusual tuning may legitimately have an uncertain key or tempo.
 
