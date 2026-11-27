@@ -129,9 +129,12 @@ InterestingEvent InterestingSectionDetector::update(const AnalysisSnapshot& s, u
 
     // Correlated level/transient changes are intentionally one evidence group.
     // This prevents a loud drum hit from counting twice as independent evidence.
+    // A breakdown is just as musically meaningful as a drop/build-up.
+    // The previous implementation only scored upward movement here, which
+    // systematically ignored energy and transient reductions.
     const float energySignal = std::max(
-        robustRise(s.rmsDb, energyBase, std::max(2.0f, 2.5f * energyMad)),
-        robustRise(s.transientRate, transientBase, std::max(0.7f, 2.5f * transientMad)));
+        clamp01(std::abs(s.rmsDb - energyBase) / std::max(2.0f, 2.5f * energyMad)),
+        clamp01(std::abs(s.transientRate - transientBase) / std::max(0.7f, 2.5f * transientMad)));
 
     const float spectralSignal = std::max(
         robustRise(s.spectralCentroidHz, centroidBase, std::max(250.0f, 3.0f * centroidMad)),
@@ -211,7 +214,11 @@ InterestingEvent InterestingSectionDetector::update(const AnalysisSnapshot& s, u
 
     // Existing section novelty is retained as a supporting signal, not a
     // duplicate vote for level/transient/spectral changes.
-    const float blendedScore = clamp01(0.72f * rawScore + 0.28f * clamp01(s.sectionNovelty));
+    // A strong, independent section-novelty signal must not be diluted by
+    // unrelated metrics that remain stable across a real arrangement change.
+    // Keep the raw multi-signal score as the other path; novelty is supporting
+    // evidence, not a requirement that every metric move together.
+    const float blendedScore = std::max(rawScore, 0.78f * clamp01(s.sectionNovelty));
     // A clear return from a genuinely quiet passage is a structural event in
     // its own right. Do not let unchanged BPM/key measurements dilute it.
     const float score = std::max(blendedScore, silenceReentry
