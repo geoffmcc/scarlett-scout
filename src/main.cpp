@@ -46,7 +46,7 @@ enum : int {
     ID_KEY_CONF = 1024, ID_TRANSIENTS = 1025, ID_CENTROID = 1026,
     ID_CHARACTER = 1027, ID_SECTION = 1028, ID_NPU_STATUS = 1029, ID_NPU_RESULT = 1030,
     ID_METER_L = 1031, ID_METER_R = 1032, ID_STATUS = 1033, ID_CAPTURE_INFO = 1034, ID_CLIP = 1035,
-    ID_TRACK_INFO = 1036, ID_INFERENCE_DEVICE = 1037,
+    ID_TRACK_INFO = 1036, ID_INFERENCE_DEVICE = 1037, ID_INTEREST = 1038,
     ID_PANEL_ROUTING = 1101, ID_PANEL_ANALYSIS = 1102, ID_PANEL_AUTOCAPTURE = 1103,
     ID_PANEL_INFERENCE = 1104, ID_PANEL_HISTORY = 1105
 };
@@ -62,7 +62,7 @@ struct App {
     HWND rms = nullptr, peak = nullptr, bpm = nullptr, bpmConfidence = nullptr, key = nullptr, keyConf = nullptr;
     HWND transients = nullptr, centroid = nullptr, character = nullptr, section = nullptr;
     HWND npuStatus = nullptr, npuResult = nullptr, meterL = nullptr, meterR = nullptr, status = nullptr, captureInfo = nullptr, clipping = nullptr;
-    HWND trackInfo = nullptr, inferenceDevice = nullptr, captureGenreResult = nullptr;
+    HWND trackInfo = nullptr, inferenceDevice = nullptr, captureGenreResult = nullptr, interest = nullptr;
     HWND inputDiagnostics = nullptr;
     HBRUSH backgroundBrush = nullptr, panelBrush = nullptr, controlBrush = nullptr;
     AudioEngine audio;
@@ -516,6 +516,7 @@ struct App {
             }
             const auto a = audio.latestAnalysis();
             const auto track = audio.trackSummary();
+            const auto interesting = audio.latestInterestingEvent();
             setText(rms, fmt(a.rmsDb, 1) + L" dBFS");
             setText(peak, fmt(a.peakDb, 1) + L" dBFS");
             const bool stableTrackTempo = track.bpmVotes >= 3 && track.bpmAgreement >= 50.0f && track.bpm > 0.0f;
@@ -545,12 +546,17 @@ struct App {
             setText(centroid, fmt(a.spectralCentroidHz, 0) + L" Hz");
             setText(character, utf8ToWide(a.character));
             setText(section, utf8ToWide(a.section));
+            if (interest) {
+                setText(interest, L"" + fmt(a.interestingScore * 100.0f, 0) + L"/100");
+                if (interesting.triggered)
+                    setText(interest, L"" + fmt(interesting.score * 100.0f, 0) + L"/100 · " + fmt(interesting.confidence, 0) + L"% confidence");
+            }
             const int leftLevel = static_cast<int>(std::clamp((a.rmsLeftDb + 60.0f) * 100.0f / 60.0f, 0.0f, 100.0f));
             const int rightLevel = static_cast<int>(std::clamp((a.rmsRightDb + 60.0f) * 100.0f / 60.0f, 0.0f, 100.0f));
             SendMessageW(meterL, PBM_SETPOS, leftLevel, 0);
             SendMessageW(meterR, PBM_SETPOS, rightLevel, 0);
             setText(clipping, fmt(a.clippingPercent, 2) + L"% clipped");
-            setText(trackInfo, L"TRACK PROFILE · " + std::to_wstring(track.windows) + L" analysis windows accumulated · estimates strengthen as the track plays");
+            setText(trackInfo, L"TRACK PROFILE · " + std::to_wstring(track.windows) + L" windows · adaptive interestingness baseline · event scoring uses multiple independent signal groups");
         } else {
             setText(inputDiagnostics, L"INPUT STREAM STOPPED · Select a source and start listening.");
             SendMessageW(meterL, PBM_SETPOS, 0, 0);
@@ -559,14 +565,18 @@ struct App {
             setText(bpmConfidence, L"—");
             setText(keyConf, L"—");
             setText(trackInfo, L"TRACK PROFILE · Start listening to build a track-level musical summary");
+            if (interest) setText(interest, L"—");
         }
         setText(npuStatus, audio.npuStatus());
         setText(npuResult, audio.npuResult());
         setText(captureGenreResult, audio.captureGenreResult());
         processAutoCapture();
         ShowWindow(candidateText, SW_SHOW);
-        if (audio.autoCapturePending())
-            setText(candidateText, L"INTERESTING PASSAGE DETECTED · automatic capture in progress · " + audio.candidateDescription());
+        if (audio.autoCapturePending()) {
+            const auto event = audio.latestInterestingEvent();
+            setText(candidateText, L"INTERESTING PASSAGE DETECTED · " + audio.candidateDescription() +
+                L" · score " + fmt(event.score * 100.0f, 0) + L"/100 · confidence " + fmt(event.confidence, 0) + L"%");
+        }
         else if (audio.autoCaptureEnabled())
             setText(candidateText, lastAutoCaptureMessage + L" · listening for the next passage.");
         else
@@ -897,6 +907,11 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         } else if (id == ID_CHANNEL && code == CBN_SELCHANGE) {
             app->syncModeToChannel(); app->selectedChannelName = app->getComboText(app->channel); app->saveSettings();
         } else if (id == ID_REFRESH) { app->refreshDevices(); app->saveSettings(); }
+        else if (id == ID_INFERENCE_DEVICE && code == CBN_SELCHANGE) {
+            // Changing the combo alone does not change the already-running
+            // OpenVINO worker. Restart it with the newly selected device.
+            app->restartInferenceWorker();
+        }
         else if (id == ID_LISTEN) {
             app->setText(app->status, L"Start Listening selected · opening the chosen WASAPI endpoint...");
             app->startListen();
@@ -926,6 +941,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     default:
         return DefWindowProcW(hwnd, msg, wp, lp);
     }
+    return DefWindowProcW(hwnd, msg, wp, lp);
 }
 
 int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR, int show) {

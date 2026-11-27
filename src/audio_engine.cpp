@@ -29,6 +29,17 @@ AudioEngine::AudioEngine() {
 
 AudioEngine::~AudioEngine() { shutdown(); }
 
+void AudioEngine::setDetectionThreshold(float threshold) {
+    threshold = std::clamp(threshold, 0.45f, 0.90f);
+    detectionThreshold_.store(threshold, std::memory_order_release);
+    InterestingSectionDetector::Config cfg;
+    cfg.threshold = threshold;
+    cfg.persistence = 2;
+    cfg.cooldownSeconds = 45;
+    cfg.baselineWindows = 12;
+    interestingDetector_.setConfig(cfg);
+}
+
 bool AudioEngine::initialize(std::wstring& error) {
     if (contextInitialized_) return refreshSources(error);
     ma_backend backend = ma_backend_wasapi;
@@ -163,6 +174,8 @@ bool AudioEngine::start(size_t sourceIndex, size_t channelIndex, ChannelMode mod
         std::lock_guard<std::mutex> lock(analysisMutex_);
         analysis_ = AnalysisSnapshot{};
         trackAccumulator_.reset();
+        interestingDetector_.reset();
+        latestInterestingEvent_ = InterestingEvent{};
         candidateDescription_ = L"Automatic capture is enabled. Waiting for a distinct musical passage.";
     }
     lastTrackSampleFrame_.store(0, std::memory_order_release);
@@ -304,6 +317,11 @@ std::wstring AudioEngine::captureGenreResult() const {
 std::wstring AudioEngine::candidateDescription() const {
     std::lock_guard<std::mutex> lock(analysisMutex_);
     return candidateDescription_;
+}
+
+InterestingEvent AudioEngine::latestInterestingEvent() const {
+    std::lock_guard<std::mutex> lock(analysisMutex_);
+    return latestInterestingEvent_;
 }
 
 void AudioEngine::setAutoCaptureEnabled(bool enabled) {
@@ -468,7 +486,7 @@ bool AudioEngine::submitNpuSegment(const std::vector<float>& stereo, bool trackW
 
 void AudioEngine::analyzerLoop() {
     constexpr unsigned kAnalysisSeconds = 18;
-    constexpr unsigned kAnalysisIntervalSeconds = 5;
+    constexpr unsigned kAnalysisIntervalSeconds = 2;
     constexpr unsigned kTrackConsensusIntervalSeconds = 10;
     constexpr unsigned kTrackInferenceIntervalSeconds = 15;
     // Preserve the analysis window as lead-in, then collect additional audio
@@ -477,6 +495,7 @@ void AudioEngine::analyzerLoop() {
     constexpr unsigned kAutoCapturePostRollSeconds = 12;
     constexpr unsigned kAutoCaptureCooldownSeconds = 45;
     uint64_t lastAnalysisFrame = 0;
+    uint64_t lastAutoCaptureFrame = 0;
 
     while (!analyzerStop_.load()) {
         loadNpuState();
@@ -494,12 +513,23 @@ void AudioEngine::analyzerLoop() {
                     std::lock_guard<std::mutex> lock(analysisMutex_);
                     previousSnapshot = analysis_;
                 }
+                bool changedMusicalSection = false;
                 if (havePriorAnalysis) {
                     snapshot.sectionNovelty = sectionNoveltyScore(previousSnapshot, snapshot);
-                    const float noveltyInterest = 0.34f + 0.58f * snapshot.sectionNovelty;
-                    snapshot.interestingScore = std::max(snapshot.interestingScore, std::clamp(noveltyInterest, 0.0f, 1.0f));
-                    if (snapshot.sectionNovelty >= 0.60f)
+                    changedMusicalSection = snapshot.sectionNovelty >= 0.60f;
+                    if (changedMusicalSection)
                         snapshot.section = "New section / notable change";
+                }
+
+                const InterestingEvent interestingEvent =
+                    interestingDetector_.update(snapshot, end, kSampleRate);
+                {
+                    std::lock_guard<std::mutex> lock(analysisMutex_);
+                    if (interestingEvent.triggered) {
+                        latestInterestingEvent_ = interestingEvent;
+                        snapshot.interestingScore = std::max(snapshot.interestingScore, interestingEvent.score);
+                        snapshot.section = interestEventTypeName(interestingEvent.type);
+                    }
                 }
                 {
                     std::lock_guard<std::mutex> lock(analysisMutex_);
@@ -529,47 +559,32 @@ void AudioEngine::analyzerLoop() {
                         candidateDescription_ = L"Post-roll complete · saving the detected passage.";
                     }
                 } else if (autoCaptureEnabled_.load(std::memory_order_acquire) &&
-                           !autoCaptureReady_.load(std::memory_order_acquire)) {
-                    const uint64_t last = lastCandidateFrame_.load(std::memory_order_acquire);
-                    const bool cooldownPassed = last == 0 || end > last + static_cast<uint64_t>(kAutoCaptureCooldownSeconds) * kSampleRate;
-                    const bool rhythmicEvidence = snapshot.transientRate >= 2.0f && snapshot.bpmConfidence >= 28.0f;
-                    const bool strongPercussiveEvidence = snapshot.transientRate >= 4.0f;
-                    const bool harmonicEvidence = snapshot.keyConfidence >= 62.0f;
-                    const bool changedMusicalSection = snapshot.sectionNovelty >= 0.52f &&
-                        (snapshot.transientRate >= 1.2f || snapshot.keyConfidence >= 30.0f);
-                    const bool musicalEvidence = rhythmicEvidence || strongPercussiveEvidence || harmonicEvidence || changedMusicalSection;
-                    if (cooldownPassed && musicalEvidence &&
-                        snapshot.interestingScore >= detectionThreshold_.load(std::memory_order_acquire) &&
-                        snapshot.rmsDb > -52.0f) {
-                        const uint64_t preFrames = static_cast<uint64_t>(kAutoCapturePreRollSeconds) * kSampleRate;
-                        const uint64_t postFrames = static_cast<uint64_t>(kAutoCapturePostRollSeconds) * kSampleRate;
-                        const uint64_t begin = end > preFrames ? end - preFrames : 0;
-                        const uint64_t finish = end + postFrames;
-                        std::wstring reason;
-                        if (snapshot.transientRate >= 2.5f && (snapshot.bpmConfidence >= 28.0f || snapshot.transientRate >= 4.0f))
-                            reason = L"Percussive-rhythmic-passage";
-                        else if (snapshot.bpmConfidence >= 48.0f)
-                            reason = L"Steady-rhythmic-loop";
-                        else if (snapshot.keyConfidence >= 62.0f)
-                            reason = L"Tonal-melodic-passage";
-                        else if (changedMusicalSection)
-                            reason = L"New-section-change";
-                        else if (snapshot.spectralCentroidHz >= 3000.0f && snapshot.transientRate >= 2.0f)
-                            reason = L"Bright-transient-texture";
-                        else
-                            reason = L"Distinctive-musical-texture";
-                        {
-                            std::lock_guard<std::mutex> lock(autoCaptureMutex_);
-                            pendingCaptureAnalysis_ = snapshot;
-                            pendingCaptureReason_ = reason;
-                        }
-                        autoCaptureStartFrame_.store(begin, std::memory_order_release);
-                        autoCaptureEndFrame_.store(finish, std::memory_order_release);
-                        lastCandidateFrame_.store(end, std::memory_order_release);
-                        autoCapturePending_.store(true, std::memory_order_release);
-                        std::lock_guard<std::mutex> lock(analysisMutex_);
-                        candidateDescription_ = reason + L" · recording twelve seconds of post-roll.";
+                           !autoCaptureReady_.load(std::memory_order_acquire) &&
+                           interestingEvent.triggered &&
+                           (lastAutoCaptureFrame == 0 ||
+                            end - lastAutoCaptureFrame >=
+                                static_cast<uint64_t>(kAutoCaptureCooldownSeconds) * kSampleRate)) {
+                    const uint64_t preFrames = static_cast<uint64_t>(kAutoCapturePreRollSeconds) * kSampleRate;
+                    const uint64_t postFrames = static_cast<uint64_t>(kAutoCapturePostRollSeconds) * kSampleRate;
+                    const uint64_t begin = interestingEvent.startFrame > preFrames
+                        ? interestingEvent.startFrame - preFrames : 0;
+                    const uint64_t finish = end + postFrames;
+
+                    std::wstring reason = utf8ToWide(interestEventTypeName(interestingEvent.type));
+                    if (!interestingEvent.explanation.empty())
+                        reason += L" · " + utf8ToWide(interestingEvent.explanation.c_str());
+                    {
+                        std::lock_guard<std::mutex> lock(autoCaptureMutex_);
+                        pendingCaptureAnalysis_ = snapshot;
+                        pendingCaptureReason_ = reason;
                     }
+                    autoCaptureStartFrame_.store(begin, std::memory_order_release);
+                    autoCaptureEndFrame_.store(finish, std::memory_order_release);
+                    lastCandidateFrame_.store(end, std::memory_order_release);
+                    lastAutoCaptureFrame = end;
+                    autoCapturePending_.store(true, std::memory_order_release);
+                    std::lock_guard<std::mutex> lock(analysisMutex_);
+                    candidateDescription_ = reason + L" · recording twelve seconds of post-roll.";
                 }
 
             }

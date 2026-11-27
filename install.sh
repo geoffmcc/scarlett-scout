@@ -110,6 +110,12 @@ c++ -std=c++20 -O2 -Wall -Wextra -Wpedantic \
   -o "$HOST_BUILD/ScarlettScoutWavTests"
 "$HOST_BUILD/ScarlettScoutWavTests"
 
+echo "Building and running interesting-section detector regression test..."
+c++ -std=c++20 -O2 -Wall -Wextra -Wpedantic \
+  -I"$ROOT/include" "$ROOT/tests/interesting_detector_tests.cpp" "$ROOT/src/interesting_detector.cpp" \
+  -o "$HOST_BUILD/ScarlettScoutInterestingDetectorTests"
+"$HOST_BUILD/ScarlettScoutInterestingDetectorTests"
+
 echo "Checking native OpenVINO C API ABI declarations..."
 "$ROOT/tests/check_npu_api_abi.sh"
 echo "Checking Windows UTF-8 metadata and dynamic function binding..."

@@ -1,5 +1,6 @@
 #pragma once
 #include "dsp.hpp"
+#include "interesting_detector.hpp"
 #include <windows.h>
 #include <atomic>
 #include <cstdint>
@@ -76,8 +77,9 @@ public:
     bool autoCaptureEnabled() const { return autoCaptureEnabled_.load(std::memory_order_acquire); }
     bool autoCapturePending() const { return autoCapturePending_.load(std::memory_order_acquire); }
     bool takeAutoCaptureEvent(AutoCaptureEvent& event);
-    void setDetectionThreshold(float threshold) { detectionThreshold_.store(threshold); }
+    void setDetectionThreshold(float threshold);
     std::wstring candidateDescription() const;
+    InterestingEvent latestInterestingEvent() const;
     void submitCapturedSampleForNpu(const std::vector<float>& stereo);
 
 private:
@@ -113,6 +115,7 @@ private:
     mutable std::mutex npuMutex_;
     AnalysisSnapshot analysis_;
     TrackAccumulator trackAccumulator_;
+    InterestingSectionDetector interestingDetector_;
     std::atomic<bool> autoCaptureEnabled_{true};
     std::atomic<bool> autoCapturePending_{false};
     std::atomic<bool> autoCaptureReady_{false};
@@ -126,6 +129,7 @@ private:
     AnalysisSnapshot pendingCaptureAnalysis_;
     std::wstring pendingCaptureReason_;
     std::wstring candidateDescription_ = L"Automatic capture is ready.";
+    InterestingEvent latestInterestingEvent_{};
     std::wstring appDir_;
     std::wstring inferenceDevice_ = L"AUTO";
     std::wstring npuStatus_ = L"Optional OpenVINO model not installed";

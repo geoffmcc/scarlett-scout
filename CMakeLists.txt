@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(ScarlettScout VERSION 0.0.7 LANGUAGES C CXX RC)
+project(ScarlettScout VERSION 0.0.8 LANGUAGES C CXX RC)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
@@ -27,6 +27,7 @@ add_executable(ScarlettScout WIN32
     src/main.cpp
     src/audio_engine.cpp
     src/dsp.cpp
+    src/interesting_detector.cpp
     src/wav.cpp
     src/miniaudio_impl.c
 )
@@ -74,4 +75,11 @@ if(BUILD_TESTING)
     add_executable(ScarlettScoutWavTests tests/wav_tests.cpp src/wav.cpp)
     target_include_directories(ScarlettScoutWavTests PRIVATE include)
     add_test(NAME wav_tests COMMAND ScarlettScoutWavTests)
+
+    add_executable(ScarlettScoutInterestingDetectorTests
+        tests/interesting_detector_tests.cpp
+        src/interesting_detector.cpp
+    )
+    target_include_directories(ScarlettScoutInterestingDetectorTests PRIVATE include)
+    add_test(NAME interesting_detector_tests COMMAND ScarlettScoutInterestingDetectorTests)
 endif()
