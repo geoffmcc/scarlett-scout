@@ -907,6 +907,11 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
         } else if (id == ID_CHANNEL && code == CBN_SELCHANGE) {
             app->syncModeToChannel(); app->selectedChannelName = app->getComboText(app->channel); app->saveSettings();
         } else if (id == ID_REFRESH) { app->refreshDevices(); app->saveSettings(); }
+        else if (id == ID_INFERENCE_DEVICE && code == CBN_SELCHANGE) {
+            // Changing the combo alone does not change the already-running
+            // OpenVINO worker. Restart it with the newly selected device.
+            app->restartInferenceWorker();
+        }
         else if (id == ID_LISTEN) {
             app->setText(app->status, L"Start Listening selected · opening the chosen WASAPI endpoint...");
             app->startListen();
