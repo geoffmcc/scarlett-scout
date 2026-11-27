@@ -245,6 +245,9 @@ InterestingEvent InterestingSectionDetector::update(const AnalysisSnapshot& s, u
         if (silenceSignal >= 0.55f) event.type = InterestEventType::SilenceReentry;
         else if (energySignal >= 0.65f && transientBase > 0.0f && s.transientRate > transientBase * 1.7f)
             event.type = InterestEventType::PercussionEntrance;
+        else if (energySignal >= 0.75f && s.rmsDb > energyBase + 4.0f &&
+                 transientBase > 0.0f && s.transientRate > transientBase * 1.8f)
+            event.type = InterestEventType::Drop;
         else if (energySignal >= 0.70f && s.rmsDb > energyBase + 3.0f)
             event.type = InterestEventType::BuildUp;
         else if (energySignal >= 0.70f && s.rmsDb < energyBase - 3.0f)
