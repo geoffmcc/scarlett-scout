@@ -7,7 +7,7 @@ WORKER="$ROOT/src/npu_worker.cpp"
 GUI="$ROOT/src/main.cpp"
 require() { grep -Fq -- "$1" "$2" || { echo "FAIL: missing track-analysis requirement: $1" >&2; exit 1; }; }
 require 'constexpr unsigned kAnalysisSeconds = 18;' "$ENGINE"
-require 'constexpr unsigned kAnalysisIntervalSeconds = 5;' "$ENGINE"
+require 'constexpr unsigned kAnalysisIntervalSeconds = 2;' "$ENGINE"
 require 'constexpr unsigned kTrackConsensusIntervalSeconds = 10;' "$ENGINE"
 require 'changedMusicalSection' "$ENGINE"
 require 'constexpr unsigned kTrackInferenceIntervalSeconds = 15;' "$ENGINE"
