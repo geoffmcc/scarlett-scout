@@ -73,6 +73,25 @@ int main() {
     assert(f.score >= cfg.threshold);
     assert(f.type == InterestEventType::SilenceReentry || f.type == InterestEventType::EnergyIncrease);
 
+    // A sustained breakdown must be detectable even though both energy
+    // and transient density fall. The old detector only rewarded upward
+    // changes and diluted section novelty below the trigger threshold.
+    d.reset();
+    frame = 0;
+    for (int i = 0; i < 8; ++i) {
+        auto baseline = steady(-16.0f, 4.5f, 2800.0f, 112.0f, 72.0f, "A minor", 68.0f);
+        assert(!d.update(baseline, frame, 48000).triggered);
+        frame += 96000;
+    }
+    auto breakdown = steady(-31.0f, 0.8f, 1100.0f, 112.0f, 68.0f, "A minor", 62.0f);
+    breakdown.sectionNovelty = 0.92f;
+    assert(!d.update(breakdown, frame, 48000).triggered);
+    frame += 96000;
+    auto breakdownEvent = d.update(breakdown, frame, 48000);
+    assert(breakdownEvent.triggered);
+    assert(breakdownEvent.type == InterestEventType::Breakdown ||
+           breakdownEvent.type == InterestEventType::EnergyDecrease);
+
     std::cout << "interesting_detector_tests: PASS\n";
     return 0;
 }
