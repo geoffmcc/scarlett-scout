@@ -63,7 +63,7 @@ void InterestingSectionDetector::setConfig(const Config& config) {
     config_.baselineWindows = std::clamp(config_.baselineWindows, 6u, 30u);
 }
 
-float InterestingSectionDetector::medianMetric(float HistoryItem::*member) const {
+float InterestingSectionDetector::medianMetric(float AnalysisSnapshot::*member) const {
     if (history_.empty()) return 0.0f;
     std::vector<float> values;
     values.reserve(history_.size());
@@ -78,7 +78,7 @@ float InterestingSectionDetector::medianMetric(float HistoryItem::*member) const
     return median;
 }
 
-float InterestingSectionDetector::robustDeviation(float HistoryItem::*member, float median) const {
+float InterestingSectionDetector::robustDeviation(float AnalysisSnapshot::*member, float median) const {
     if (history_.size() < 2) return 0.0f;
     std::vector<float> deviations;
     deviations.reserve(history_.size());
@@ -116,16 +116,16 @@ InterestingEvent InterestingSectionDetector::update(const AnalysisSnapshot& s, u
         return event;
     }
 
-    const float energyBase = medianMetric(&HistoryItem::snapshot.rmsDb);
-    const float transientBase = medianMetric(&HistoryItem::snapshot.transientRate);
-    const float centroidBase = medianMetric(&HistoryItem::snapshot.spectralCentroidHz);
-    const float stereoBase = medianMetric(&HistoryItem::snapshot.stereoCorrelation);
-    const float silenceBase = medianMetric(&HistoryItem::snapshot.silencePercent);
+    const float energyBase = medianMetric(&AnalysisSnapshot::rmsDb);
+    const float transientBase = medianMetric(&AnalysisSnapshot::transientRate);
+    const float centroidBase = medianMetric(&AnalysisSnapshot::spectralCentroidHz);
+    const float stereoBase = medianMetric(&AnalysisSnapshot::stereoCorrelation);
+    const float silenceBase = medianMetric(&AnalysisSnapshot::silencePercent);
 
-    const float energyMad = robustDeviation(&HistoryItem::snapshot.rmsDb, energyBase);
-    const float transientMad = robustDeviation(&HistoryItem::snapshot.transientRate, transientBase);
-    const float centroidMad = robustDeviation(&HistoryItem::snapshot.spectralCentroidHz, centroidBase);
-    const float stereoMad = robustDeviation(&HistoryItem::snapshot.stereoCorrelation, stereoBase);
+    const float energyMad = robustDeviation(&AnalysisSnapshot::rmsDb, energyBase);
+    const float transientMad = robustDeviation(&AnalysisSnapshot::transientRate, transientBase);
+    const float centroidMad = robustDeviation(&AnalysisSnapshot::spectralCentroidHz, centroidBase);
+    const float stereoMad = robustDeviation(&AnalysisSnapshot::stereoCorrelation, stereoBase);
 
     // Correlated level/transient changes are intentionally one evidence group.
     // This prevents a loud drum hit from counting twice as independent evidence.
