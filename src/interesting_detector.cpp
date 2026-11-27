@@ -211,7 +211,10 @@ InterestingEvent InterestingSectionDetector::update(const AnalysisSnapshot& s, u
 
     // Existing section novelty is retained as a supporting signal, not a
     // duplicate vote for level/transient/spectral changes.
-    const float score = clamp01(0.72f * rawScore + 0.28f * clamp01(s.sectionNovelty));
+    const float blendedScore = clamp01(0.72f * rawScore + 0.28f * clamp01(s.sectionNovelty));
+    // A clear return from a genuinely quiet passage is a structural event in
+    // its own right. Do not let unchanged BPM/key measurements dilute it.
+    const float score = std::max(blendedScore, silenceReentry ? 0.70f * silenceSignal : 0.0f);
 
     std::vector<std::string> reasons;
     if (energySignal >= 0.55f) reasons.push_back(s.rmsDb > energyBase ? "energy rises" : "energy falls");
