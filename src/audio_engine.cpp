@@ -493,7 +493,9 @@ void AudioEngine::analyzerLoop() {
     // after the event so that the interesting passage is not cut off.
     constexpr unsigned kAutoCapturePreRollSeconds = 18;
     constexpr unsigned kAutoCapturePostRollSeconds = 12;
+    constexpr unsigned kAutoCaptureCooldownSeconds = 45;
     uint64_t lastAnalysisFrame = 0;
+    uint64_t lastAutoCaptureFrame = 0;
 
     while (!analyzerStop_.load()) {
         loadNpuState();
@@ -558,7 +560,10 @@ void AudioEngine::analyzerLoop() {
                     }
                 } else if (autoCaptureEnabled_.load(std::memory_order_acquire) &&
                            !autoCaptureReady_.load(std::memory_order_acquire) &&
-                           interestingEvent.triggered) {
+                           interestingEvent.triggered &&
+                           (lastAutoCaptureFrame == 0 ||
+                            end - lastAutoCaptureFrame >=
+                                static_cast<uint64_t>(kAutoCaptureCooldownSeconds) * kSampleRate)) {
                     const uint64_t preFrames = static_cast<uint64_t>(kAutoCapturePreRollSeconds) * kSampleRate;
                     const uint64_t postFrames = static_cast<uint64_t>(kAutoCapturePostRollSeconds) * kSampleRate;
                     const uint64_t begin = interestingEvent.startFrame > preFrames
@@ -576,6 +581,7 @@ void AudioEngine::analyzerLoop() {
                     autoCaptureStartFrame_.store(begin, std::memory_order_release);
                     autoCaptureEndFrame_.store(finish, std::memory_order_release);
                     lastCandidateFrame_.store(end, std::memory_order_release);
+                    lastAutoCaptureFrame = end;
                     autoCapturePending_.store(true, std::memory_order_release);
                     std::lock_guard<std::mutex> lock(analysisMutex_);
                     candidateDescription_ = reason + L" · recording twelve seconds of post-roll.";
