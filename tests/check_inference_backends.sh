@@ -19,6 +19,8 @@ require 'npu-capture-result.txt' "$ENGINE"
 require 'coreCompileModel(core, model, candidate.c_str()' "$WORKER"
 require 'if (request != "AUTO") break;' "$WORKER"
 require 'L" --device "' "$ENGINE"
+require 'id == ID_INFERENCE_DEVICE && code == CBN_SELCHANGE' "$ROOT/src/main.cpp"
+require 'app->restartInferenceWorker();' "$ROOT/src/main.cpp"
 require 'openvino_intel_gpu_plugin.dll' "$INSTALL"
 require 'openvino_intel_cpu_plugin.dll' "$INSTALL"
 echo 'Inference backend source-contract checks passed: AUTO/NPU/GPU/CPU selection and explicit OpenVINO device compilation.'
