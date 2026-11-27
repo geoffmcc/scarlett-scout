@@ -66,8 +66,12 @@ int main() {
     frame += 240000;
     reentry.silencePercent = 5.0f;
     auto e = d.update(reentry, frame, 48000);
-    assert(e.triggered);
-    assert(e.type == InterestEventType::SilenceReentry || e.type == InterestEventType::EnergyIncrease);
+    assert(!e.triggered); // first qualifying window; persistence is 2
+    frame += 240000;
+    auto f = d.update(reentry, frame, 48000);
+    assert(f.triggered);
+    assert(f.score >= cfg.threshold);
+    assert(f.type == InterestEventType::SilenceReentry || f.type == InterestEventType::EnergyIncrease);
 
     std::cout << "interesting_detector_tests: PASS\n";
     return 0;
