@@ -185,9 +185,14 @@ InterestingEvent InterestingSectionDetector::update(const AnalysisSnapshot& s, u
 
     const float stereoSignal = clamp01(std::abs(s.stereoCorrelation - stereoBase) /
                                        std::max(0.18f, 3.0f * stereoMad));
-    const float silenceSignal = (silenceBase > 25.0f && s.silencePercent < silenceBase - 18.0f)
-        ? clamp01((silenceBase - s.silencePercent - 12.0f) / 45.0f)
-        : 0.0f;
+    float highestRecentSilence = silenceBase;
+    for (const auto& item : history_) highestRecentSilence = std::max(highestRecentSilence, item.snapshot.silencePercent);
+    const bool silenceReentry = highestRecentSilence >= 55.0f && s.silencePercent <= 20.0f;
+    const float silenceSignal = silenceReentry
+        ? clamp01((highestRecentSilence - s.silencePercent - 25.0f) / 45.0f)
+        : ((silenceBase > 25.0f && s.silencePercent < silenceBase - 18.0f)
+            ? clamp01((silenceBase - s.silencePercent - 12.0f) / 45.0f)
+            : 0.0f);
 
     // Missing/weak measurements do not contribute evidence. Weights are
     // renormalized over available signal groups.
