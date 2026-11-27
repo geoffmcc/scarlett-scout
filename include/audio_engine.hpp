@@ -77,7 +77,7 @@ public:
     bool autoCaptureEnabled() const { return autoCaptureEnabled_.load(std::memory_order_acquire); }
     bool autoCapturePending() const { return autoCapturePending_.load(std::memory_order_acquire); }
     bool takeAutoCaptureEvent(AutoCaptureEvent& event);
-    void setDetectionThreshold(float threshold) { detectionThreshold_.store(threshold); }
+    void setDetectionThreshold(float threshold);
     std::wstring candidateDescription() const;
     InterestingEvent latestInterestingEvent() const;
     void submitCapturedSampleForNpu(const std::vector<float>& stereo);
