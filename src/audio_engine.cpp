@@ -522,8 +522,8 @@ void AudioEngine::analyzerLoop() {
                     interestingDetector_.update(snapshot, end, kSampleRate);
                 {
                     std::lock_guard<std::mutex> lock(analysisMutex_);
-                    latestInterestingEvent_ = interestingEvent;
                     if (interestingEvent.triggered) {
+                        latestInterestingEvent_ = interestingEvent;
                         snapshot.interestingScore = std::max(snapshot.interestingScore, interestingEvent.score);
                         snapshot.section = interestEventTypeName(interestingEvent.type);
                     }
