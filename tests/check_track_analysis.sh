@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+DSP="$ROOT/src/dsp.cpp"
+ENGINE="$ROOT/src/audio_engine.cpp"
+WORKER="$ROOT/src/npu_worker.cpp"
+GUI="$ROOT/src/main.cpp"
+require() { grep -Fq -- "$1" "$2" || { echo "FAIL: missing track-analysis requirement: $1" >&2; exit 1; }; }
+require 'constexpr unsigned kAnalysisSeconds = 18;' "$ENGINE"
+require 'constexpr unsigned kAnalysisIntervalSeconds = 5;' "$ENGINE"
+require 'constexpr unsigned kTrackConsensusIntervalSeconds = 10;' "$ENGINE"
+require 'changedMusicalSection' "$ENGINE"
+require 'constexpr unsigned kTrackInferenceIntervalSeconds = 15;' "$ENGINE"
+require 'trackAccumulator_.add(snapshot)' "$ENGINE"
+require 'TrackSummary TrackAccumulator::summary() const' "$DSP"
+require 'w.keyConfidence >= 25.0f' "$DSP"
+require 'changedTonalCenter' "$DSP"
+require 'halfPeriodStrength >= full.strength * 0.60f' "$DSP"
+require 'trackWinnerCounts' "$WORKER"
+require 'const bool reliableTrackVote = trackWindowCount >= 4' "$WORKER"
+require 'TRACK_UNCERTAIN|' "$WORKER"
+require 'npu-track-result.txt' "$ENGINE"
+require 'npu-capture-result.txt' "$ENGINE"
+require 'captureGenreResult_ ' "$ROOT/include/audio_engine.hpp"
+require 'GPU (OpenVINO)' "$GUI"
+require 'RGB(20, 26, 34)' "$GUI"
+require 'Alternate BPM interpretation:' "$GUI"
+echo 'Track-analysis contracts passed: rolling track consensus, confidence-qualified key votes, 15s overlapping model windows, genre-vote uncertainty, independent capture results, dark UI and GPU selector.'

@@ -1,0 +1,7 @@
+build-windows/
+build-host/
+dist/
+.cache/
+.cache-*/
+vendor/miniaudio.h
+vendor/miniaudio.h.tmp

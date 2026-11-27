@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
+WORKER="$ROOT/src/npu_worker.cpp"
+ENGINE="$ROOT/src/audio_engine.cpp"
+INSTALL="$ROOT/install.sh"
+require() { grep -Fq -- "$1" "$2" || { echo "FAIL: missing inference backend requirement: $1" >&2; exit 1; }; }
+require 'requestedDevice.empty() ? "AUTO" : requestedDevice' "$WORKER"
+require 'std::string("NPU"), std::string("GPU"), std::string("CPU")' "$WORKER"
+require 'const std::string found = findDevice(request)' "$WORKER"
+require 'compileCandidates.push_back(found)' "$WORKER"
+require 'trackWinnerCounts' "$WORKER"
+require 'TRACK_UNCERTAIN|' "$WORKER"
+require 'trackWindowCount >= 4' "$WORKER"
+require 'trackResultPath' "$WORKER"
+require 'captureResultPath' "$WORKER"
+require 'npu-track-result.txt' "$ENGINE"
+require 'npu-capture-result.txt' "$ENGINE"
+require 'coreCompileModel(core, model, candidate.c_str()' "$WORKER"
+require 'if (request != "AUTO") break;' "$WORKER"
+require 'L" --device "' "$ENGINE"
+require 'openvino_intel_gpu_plugin.dll' "$INSTALL"
+require 'openvino_intel_cpu_plugin.dll' "$INSTALL"
+echo 'Inference backend source-contract checks passed: AUTO/NPU/GPU/CPU selection and explicit OpenVINO device compilation.'
