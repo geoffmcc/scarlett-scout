@@ -9,6 +9,8 @@
 #include <onnxruntime_cxx_api.h>
 #include "version.hpp"
 #include <algorithm>
+#include <array>
+#include <stdexcept>
 #include <chrono>
 #include <cmath>
 #include <cstdint>
@@ -125,6 +127,8 @@ int wmain() {
             std::array<int64_t,2> shape{1,(int64_t)audio.size()};
             auto mem=Ort::MemoryInfo::CreateCpu(OrtArenaAllocator,OrtMemTypeDefault);
             std::vector<Ort::Value> tensors;
+            std::vector<int64_t> maskI64;
+            std::vector<float> maskF32;
             auto inputType=session.GetInputTypeInfo(0).GetTensorTypeAnd、ShapeInfo().GetElementType();
             if(inputType==ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT)
                 tensors.emplace_back(Ort::Value::CreateTensor<float>(mem,audio.data(),audio.size(),shape.data(),2));
@@ -132,8 +136,8 @@ int wmain() {
             if(session.GetInputCount()>1){
                 auto info=session.GetInputTypeInfo(1).GetTensorTypeAnd、ShapeInfo();
                 auto type=info.GetElementType(); auto dims=info.GetShape(); size_t count=1;for(auto d:dims)count*=size_t(d<0?shape[1]:d);
-                if(type==ONNX_TENSOR_ELEMENT_DATA_TYPE_INT64){std::vector<int64_t> mask(count,1);tensors.emplace_back(Ort::Value::CreateTensor<int64_t>(mem,mask.data(),mask.size(),dims.data(),dims.size()));}
-                else if(type==ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT){std::vector<float> mask(count,1.f);tensors.emplace_back(Ort::Value::CreateTensor<float>(mem,mask.data(),mask.size(),dims.data(),dims.size()));}
+                if(type==ONNX_TENSOR_ELEMENT_DATA_TYPE_INT64){maskI64.assign(count,1);tensors.emplace_back(Ort::Value::CreateTensor<int64_t>(mem,maskI64.data(),maskI64.size(),dims.data(),dims.size()));}
+                else if(type==ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT){maskF32.assign(count,1.f);tensors.emplace_back(Ort::Value::CreateTensor<float>(mem,maskF32.data(),maskF32.size(),dims.data(),dims.size()));}
                 else throw std::runtime_error("Unsupported CUDA attention-mask tensor type");
             }
             auto outputs=session.Run(Ort::RunOptions{nullptr},inputPtrs.data(),tensors.data(),tensors.size(),&outputPtr,1);
