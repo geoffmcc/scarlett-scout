@@ -204,3 +204,103 @@ if (( DO_NPU )); then
   }
 
   if [[ ! -d "$OV_EXTRACT" ]] || ! find "$OV_EXTRACT" -type f -name openvino_c.dll -print -quit | grep -q .; then
+    rm -rf "$OV_EXTRACT"
+    mkdir -p "$OV_EXTRACT"
+    echo "Extracting native OpenVINO runtime files..."
+    unzip -q "$OV_ARCHIVE_PATH" -d "$OV_EXTRACT"
+  fi
+  OV_DLL_DIR="$(find "$OV_EXTRACT" -type f -name openvino_c.dll -printf '%h\n' | head -n 1)"
+  [[ -n "$OV_DLL_DIR" ]] || { echo "The downloaded OpenVINO archive did not contain openvino_c.dll." >&2; exit 1; }
+  OV_RUNTIME_SUFFIX="/bin/intel64/Release"
+  case "$OV_DLL_DIR" in
+    *"$OV_RUNTIME_SUFFIX") OV_RUNTIME_SOURCE="${OV_DLL_DIR%$OV_RUNTIME_SUFFIX}" ;;
+    *) echo "Unexpected OpenVINO DLL layout: $OV_DLL_DIR" >&2; exit 1 ;;
+  esac
+  [[ -s "$OV_DLL_DIR/openvino_intel_npu_plugin.dll" ]] || {
+    echo "OpenVINO archive does not contain openvino_intel_npu_plugin.dll beside openvino_c.dll." >&2; exit 1;
+  }
+
+  # Keep all available inference backends in the app-local plugin map. The
+  # worker still compiles explicitly for the user's selected device; this XML
+  # only makes the installed plugins discoverable to OpenVINO.
+  {
+    printf '%s\n' '<?xml version="1.0"?>' '<ie>' '  <plugins>'
+    [[ -s "$OV_DLL_DIR/openvino_intel_npu_plugin.dll" ]] && printf '%s\n' '    <plugin name="NPU" location="openvino_intel_npu_plugin.dll" />'
+    [[ -s "$OV_DLL_DIR/openvino_intel_gpu_plugin.dll" ]] && printf '%s\n' '    <plugin name="GPU" location="openvino_intel_gpu_plugin.dll" />'
+    [[ -s "$OV_DLL_DIR/openvino_intel_cpu_plugin.dll" ]] && printf '%s\n' '    <plugin name="CPU" location="openvino_intel_cpu_plugin.dll" />'
+    printf '%s\n' '  </plugins>' '</ie>'
+  } > "$OV_DLL_DIR/plugins.xml"
+  [[ -s "$OV_DLL_DIR/plugins.xml" ]] || {
+    echo "Could not create the Scarlett Scout OpenVINO plugin configuration." >&2; exit 1;
+  }
+  if [[ ! -s "$OV_DLL_DIR/openvino_intel_npu_plugin.dll" ]]; then
+    echo "OpenVINO runtime archive is missing its NPU plugin." >&2; exit 1
+  fi
+  if [[ -s "$OV_DLL_DIR/openvino_intel_gpu_plugin.dll" ]]; then
+    echo "OpenVINO GPU plugin found; GPU inference will be offered if a compatible GPU is enumerated by the Windows driver."
+  else
+    echo "OpenVINO GPU plugin not present in this runtime archive; GPU inference will be unavailable."
+  fi
+
+  [[ -s "$OV_RUNTIME_SOURCE/3rdparty/tbb/bin/tbb12.dll" ]] || {
+    echo "OpenVINO archive is missing its expected TBB runtime dependency." >&2; exit 1;
+  }
+
+  if [[ ! -s "$MODEL_PATH" ]] || [[ "$(sha256sum "$MODEL_PATH" | awk '{print $1}')" != "$MODEL_SHA256" ]]; then
+    echo "Downloading the local music-genre ONNX model..."
+    curl --fail --location --retry 3 --connect-timeout 20 "$MODEL_URL" -o "$MODEL_PATH.tmp"
+    ACTUAL_MODEL_SHA="$(sha256sum "$MODEL_PATH.tmp" | awk '{print $1}')"
+    if [[ "$ACTUAL_MODEL_SHA" != "$MODEL_SHA256" ]]; then
+      rm -f "$MODEL_PATH.tmp"
+      echo "Genre model SHA-256 mismatch; refusing to install it." >&2
+      echo "Expected: $MODEL_SHA256" >&2
+      echo "Actual:   $ACTUAL_MODEL_SHA" >&2
+      exit 1
+    fi
+    mv "$MODEL_PATH.tmp" "$MODEL_PATH"
+  fi
+  if [[ ! -s "$CONFIG_PATH" ]]; then
+    curl --fail --location --retry 3 --connect-timeout 20 "$CONFIG_URL" -o "$CONFIG_PATH"
+  fi
+
+  echo "Installing native OpenVINO runtime and model under Windows LocalAppData..."
+  rm -rf "$APP_DIR_WSL/openvino_runtime/runtime"
+  mkdir -p "$APP_DIR_WSL/openvino_runtime"
+  cp -a "$OV_RUNTIME_SOURCE" "$APP_DIR_WSL/openvino_runtime/"
+  cp "$MODEL_PATH" "$APP_DIR_WSL/models/genre-model.onnx"
+  cp "$CONFIG_PATH" "$APP_DIR_WSL/models/config.json"
+  printf 'OpenVINO %s (Windows vc_mt archive)\n' "$OPENVINO_VERSION" > "$APP_DIR_WSL/openvino-runtime-version.txt"
+else
+  echo "Skipping OpenVINO runtime/model download (--skip-npu)."
+fi
+
+# Create a portable Windows folder too. It includes native runtime binaries and
+# the model only when NPU installation was requested.
+PORTABLE="$ROOT/dist/ScarlettScout-${APP_VERSION}-Windows-x64"
+rm -rf "$PORTABLE"
+mkdir -p "$PORTABLE/models" "$PORTABLE/npu-inbox"
+cp "$APP_EXE" "$NPU_EXE" "$PORTABLE/"
+cp "$ROOT/README.md" "$PORTABLE/README.txt"
+cp "$ROOT/THIRD-PARTY-NOTICES.md" "$PORTABLE/THIRD-PARTY-NOTICES.txt"
+if (( DO_NPU )); then
+  mkdir -p "$PORTABLE/openvino_runtime"
+  cp -a "$OV_RUNTIME_SOURCE" "$PORTABLE/openvino_runtime/"
+  cp "$MODEL_PATH" "$PORTABLE/models/genre-model.onnx"
+  cp "$CONFIG_PATH" "$PORTABLE/models/config.json"
+fi
+(cd "$ROOT/dist" && zip -qr "ScarlettScout-${APP_VERSION}-Windows-x64.zip" "ScarlettScout-${APP_VERSION}-Windows-x64")
+
+printf '\nBuild and installation completed.\n'
+printf 'Windows application: %s\\ScarlettScout.exe\n' "$APP_DIR_WIN"
+printf 'Native inference worker: %s\\ScarlettScoutNpuWorker.exe\n' "$APP_DIR_WIN"
+printf 'Application version:  v%s\n' "$APP_VERSION"
+printf 'Portable Windows ZIP: %s\n' "$ROOT/dist/ScarlettScout-${APP_VERSION}-Windows-x64.zip"
+printf 'Capture folder: Documents\\Scarlett Scout Captures\n'
+printf 'Python was not installed or invoked on Windows.\n'
+printf 'NPU worker handshake reports its own version on launch; physical Scarlett routing and NPU inference still require hardware verification.\n'
+
+if (( DO_LAUNCH )); then
+  EXE_WIN="$(wslpath -w "$APP_DIR_WSL/ScarlettScout.exe")"
+  echo "Launching Scarlett Scout..."
+  cmd.exe /C start "" "$EXE_WIN" || true
+fi
