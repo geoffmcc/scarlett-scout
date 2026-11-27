@@ -512,9 +512,11 @@ void AudioEngine::analyzerLoop() {
                     std::lock_guard<std::mutex> lock(analysisMutex_);
                     previousSnapshot = analysis_;
                 }
+                bool changedMusicalSection = false;
                 if (havePriorAnalysis) {
                     snapshot.sectionNovelty = sectionNoveltyScore(previousSnapshot, snapshot);
-                    if (snapshot.sectionNovelty >= 0.60f)
+                    changedMusicalSection = snapshot.sectionNovelty >= 0.60f;
+                    if (changedMusicalSection)
                         snapshot.section = "New section / notable change";
                 }
 
