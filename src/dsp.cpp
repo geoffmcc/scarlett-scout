@@ -428,10 +428,12 @@ AnalysisSnapshot analyzeAudio(const std::vector<float>& stereo, unsigned sampleR
 
 float sectionNoveltyScore(const AnalysisSnapshot& previous, const AnalysisSnapshot& recent) {
     if (recent.rmsDb <= -58.0f) return 0.0f;
-    const float rmsRise = recent.rmsDb - previous.rmsDb;
-    const float energyChange = std::clamp((rmsRise - 1.0f) / 7.0f, 0.0f, 1.0f);
-    const float transientRise = recent.transientRate - previous.transientRate;
-    const float transientChange = std::clamp((transientRise - 0.25f) / 1.8f, 0.0f, 1.0f);
+    // Section changes are bidirectional: a breakdown, dropout, or sparse
+    // passage can be as useful as a build or percussion entrance.
+    const float energyDelta = std::abs(recent.rmsDb - previous.rmsDb);
+    const float energyChange = std::clamp((energyDelta - 1.0f) / 7.0f, 0.0f, 1.0f);
+    const float transientDelta = std::abs(recent.transientRate - previous.transientRate);
+    const float transientChange = std::clamp((transientDelta - 0.25f) / 1.8f, 0.0f, 1.0f);
     const float oldCentroid = std::max(previous.spectralCentroidHz, 100.0f);
     const float newCentroid = std::max(recent.spectralCentroidHz, 100.0f);
     const float centroidRatio = std::max(newCentroid / oldCentroid, oldCentroid / newCentroid);
