@@ -493,7 +493,6 @@ void AudioEngine::analyzerLoop() {
     // after the event so that the interesting passage is not cut off.
     constexpr unsigned kAutoCapturePreRollSeconds = 18;
     constexpr unsigned kAutoCapturePostRollSeconds = 12;
-    constexpr unsigned kAutoCaptureCooldownSeconds = 45;
     uint64_t lastAnalysisFrame = 0;
 
     while (!analyzerStop_.load()) {
@@ -568,7 +567,7 @@ void AudioEngine::analyzerLoop() {
 
                     std::wstring reason = utf8ToWide(interestEventTypeName(interestingEvent.type));
                     if (!interestingEvent.explanation.empty())
-                        reason += L" · " + utf8ToWide(interestingEvent.explanation);
+                        reason += L" · " + utf8ToWide(interestingEvent.explanation.c_str());
                     {
                         std::lock_guard<std::mutex> lock(autoCaptureMutex_);
                         pendingCaptureAnalysis_ = snapshot;
