@@ -5,7 +5,7 @@ ENGINE="$ROOT/src/audio_engine.cpp"
 GUI="$ROOT/src/main.cpp"
 require() { grep -Fq -- "$1" "$2" || { echo "FAIL: missing capture-workflow requirement: $1" >&2; exit 1; }; }
 require 'constexpr unsigned kAnalysisSeconds = 18;' "$ENGINE"
-require 'constexpr unsigned kAnalysisIntervalSeconds = 5;' "$ENGINE"
+require 'constexpr unsigned kAnalysisIntervalSeconds = 2;' "$ENGINE"
 require 'constexpr unsigned kTrackInferenceIntervalSeconds = 15;' "$ENGINE"
 require 'trackAccumulator_.add(snapshot)' "$ENGINE"
 require 'submitNpuSegment(samples, true)' "$ENGINE"
@@ -35,4 +35,4 @@ require 'trackWinnerCounts' "$ROOT/src/npu_worker.cpp"
 require 'TRACK_UNCERTAIN|' "$ROOT/src/npu_worker.cpp"
 require 'trackWindowCount >= 4' "$ROOT/src/npu_worker.cpp"
 require 'Auto-saves 30-second clips' "$GUI"
-echo 'Automatic capture workflow checks passed: full-window + post-roll, auto-save, keyed/reasoned names, capture-linked NPU, no Ignore prompt.'
+echo 'Automatic capture workflow checks passed: 2-second analysis cadence, full-window + post-roll, auto-save, keyed/reasoned names, capture-linked NPU, no Ignore prompt.'
