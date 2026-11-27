@@ -1,4 +1,4 @@
-# Scarlett Scout v0.0.7 — Track-aware sample discovery foundation
+# Scarlett Scout v0.0.8 — Adaptive interesting-section detection
 
 Scarlett Scout is a native Windows x64 desktop application for listening to audio from a Focusrite interface or other Windows audio endpoints, analyzing musical material, and automatically capturing sample-worthy passages. The intended workflow is to leave Scout listening while digging through vinyl, YouTube, a DAW, or other audio sources; qualifying sections are saved automatically so the listener does not need to time a manual recording.
 
@@ -6,7 +6,7 @@ Development and cross-compilation happen in WSL. The deployed Windows applicatio
 
 This release is a substantial track-analysis and workflow foundation. It is not yet a claim of professional-grade accuracy across every music style or a substitute for validation with the user's Scarlett hardware and actual sample-digging sessions. The analysis reports its uncertainty instead of inventing a definitive answer when evidence is weak.
 
-## What is new in v0.0.7
+## What is new in v0.0.8
 
 - Fixed a Win32 control-style bug in the dark UI. The previous code combined `BS_GROUPBOX` and `BS_OWNERDRAW` using bitwise OR; their values produced `BS_DEFCOMMANDLINK` (`0xF`) rather than an owner-drawn group box. This rendered a white command-link icon area in each of the five sections and allowed the panel backgrounds to receive focus/clicks.
 - Replaced the interactive group-box controls with non-interactive owner-drawn STATIC panels. Only actual buttons now receive button clicks, restoring predictable Start Listening and other control behavior.
@@ -23,6 +23,14 @@ This release is a substantial track-analysis and workflow foundation. It is not 
 - Track-key consensus only counts windows whose local key estimate clears the minimum confidence threshold; weak guesses no longer inflate the winning key's vote count.
 - Inference backend selection is available in the UI: Automatic, Intel NPU, GPU (OpenVINO), and CPU. Automatic prefers NPU, then GPU, then CPU; explicit selections do not silently switch devices.
 - The interface uses a restrained dark studio theme with clearer live analysis, capture, track-profile, and inference sections.
+
+- Added an adaptive **Interesting Section Detector** that maintains a rolling robust baseline instead of comparing every passage against fixed loudness thresholds.
+- Interestingness combines independent signal groups: energy/transient behavior, spectral change, rhythm/tempo behavior, tonal-center changes, stereo-image changes, and silence/re-entry. Correlated level/transient evidence is grouped so a single loud drum hit is not counted twice.
+- Every detected event has a 0–100 interest score and a separate confidence score. Weak or unavailable measurements are excluded from the evidence total rather than treated as positive evidence.
+- Events use persistence and cooldown to prevent repeated triggers, and the detector classifies probable breakdowns, build-ups, drops, transitions, percussion entrances, rhythmic changes, energy changes, instrumental/textural changes, spectral events, and silence re-entry.
+- Automatic capture now uses the detector event lifecycle: the detected section gets a pre-roll, the detector's event timestamp is retained, and post-roll is collected before the WAV is saved.
+- The live UI exposes current interestingness and, when an event is active, its score and confidence alongside the explanation. The track profile explicitly distinguishes adaptive event scoring from track-level BPM/key consensus.
+- Added host-runnable regression tests for adaptive baselines, persistence, cooldown, multi-signal events, and silence/re-entry behavior.
 
 ## Audio source and routing support
 
