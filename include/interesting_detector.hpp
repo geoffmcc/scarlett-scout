@@ -59,8 +59,8 @@ private:
     uint64_t lastEventFrame_ = 0;
     uint64_t pendingStartFrame_ = 0;
 
-    float medianMetric(float HistoryItem::*member) const;
-    float robustDeviation(float HistoryItem::*member, float median) const;
+    float medianMetric(float AnalysisSnapshot::*member) const;
+    float robustDeviation(float AnalysisSnapshot::*member, float median) const;
 };
 
 }
