@@ -486,7 +486,7 @@ bool AudioEngine::submitNpuSegment(const std::vector<float>& stereo, bool trackW
 
 void AudioEngine::analyzerLoop() {
     constexpr unsigned kAnalysisSeconds = 18;
-    constexpr unsigned kAnalysisIntervalSeconds = 5;
+    constexpr unsigned kAnalysisIntervalSeconds = 2;
     constexpr unsigned kTrackConsensusIntervalSeconds = 10;
     constexpr unsigned kTrackInferenceIntervalSeconds = 15;
     // Preserve the analysis window as lead-in, then collect additional audio
